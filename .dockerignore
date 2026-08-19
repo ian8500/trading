@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+.venv
+node_modules
+frontend/node_modules
+frontend/dist
+data/cache
+data/historical
+data/exports
+*.sqlite*
+*.log
+*.pem
+*.key
+*.crt

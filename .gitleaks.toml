@@ -1,0 +1,13 @@
+title = "Trading platform secret scanning"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Only documented blank/template values are allowed"
+regexTarget = "line"
+regexes = ['''pragma: allowlist secret''']
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)backend/tests/fixtures/''',
+]

@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-intelligence-platform"
+version = "0.1.0"
+description = "Local multi-market trading research and IG Demo automation platform"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.14,<2",
+  "argon2-cffi>=23.1,<26",
+  "defusedxml>=0.7,<1",
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "numpy>=2.1,<3",
+  "pandas>=2.2,<3",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "python-multipart>=0.0.20,<1",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "detect-secrets>=1.5,<2",
+  "mypy>=1.14,<2",
+  "pandas-stubs>=2.2,<3",
+  "pre-commit>=4.0,<5",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.25,<1",
+  "pytest-cov>=6,<7",
+  "respx>=0.22,<1",
+  "ruff>=0.9,<1",
+  "types-defusedxml>=0.7,<1",
+  "types-python-dateutil>=2.9,<3",
+]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+markers = [
+  "integration: integration tests that may require local services",
+  "real_data: tests or runs that contact a genuine public data provider",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "S", "RUF"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["app"]
+mypy_path = "backend"
+strict = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]

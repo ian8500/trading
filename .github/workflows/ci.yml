@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: trading_test
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading # pragma: allowlist secret -- disposable CI database only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trading -d trading_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://trading:trading@127.0.0.1:5432/trading_test # pragma: allowlist secret -- disposable CI database only
+      IG_ENVIRONMENT: DEMO
+      AUTONOMOUS_DEMO_ENABLED: "false"
+      LIVE_EXECUTION_ENABLED: "false"
+      LIVE_BROKER_IMPLEMENTATION_ENABLED: "false"
+      AI_PROVIDER: disabled
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: alembic upgrade head
+      - run: ruff check backend scripts alembic/env.py
+      - run: ruff format --check backend scripts alembic/env.py
+      - run: mypy backend/app
+      - run: pytest backend/tests --cov=app --cov-report=term-missing
+      - name: Safety invariants
+        run: pytest backend/tests -k 'lookahead or future or live or risk or compound or stale or secret'
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run lint
+      - working-directory: frontend
+        run: npm run typecheck
+      - working-directory: frontend
+        run: npm test -- --run
+      - working-directory: frontend
+        run: npm run build
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,1 @@
+"""Local notification provider abstraction."""

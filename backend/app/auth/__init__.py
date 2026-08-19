@@ -1,0 +1,1 @@
+"""Local dashboard administrator authentication."""

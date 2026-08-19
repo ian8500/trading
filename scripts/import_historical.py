@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.database.models import DataManifestRecord, HistoricalBarRecord, InstrumentRecord
+from app.database.numeric import quantize_data_quality, quantize_price, quantize_volume
 from app.database.session import SessionLocal
 from app.instruments.catalog import CORE_UNIVERSE, OFFICIAL_DAILY_SYMBOLS, OFFICIAL_INTRADAY_SYMBOLS
 from app.market_data.models import HistoricalDataset
@@ -80,14 +81,20 @@ def persist_dataset(dataset: HistoricalDataset) -> None:
             )
         }
         for bar in dataset.bars:
+            open_price = quantize_price(bar.open)
+            high_price = quantize_price(bar.high)
+            low_price = quantize_price(bar.low)
+            close_price = quantize_price(bar.close)
+            volume = quantize_volume(bar.volume)
+            data_quality = quantize_data_quality(dataset.quality.score)
             values = {
-                "open": bar.open,
-                "high": bar.high,
-                "low": bar.low,
-                "close": bar.close,
-                "volume": bar.volume,
+                "open": open_price,
+                "high": high_price,
+                "low": low_price,
+                "close": close_price,
+                "volume": volume,
                 "complete": bar.complete,
-                "data_quality": dataset.quality.score,
+                "data_quality": data_quality,
                 "manifest_checksum": checksum,
             }
             database_timestamp = _database_timestamp(bar.timestamp)
@@ -99,13 +106,13 @@ def persist_dataset(dataset: HistoricalDataset) -> None:
                         provider=dataset.manifest.provider,
                         interval=dataset.interval,
                         timestamp=database_timestamp,
-                        open=bar.open,
-                        high=bar.high,
-                        low=bar.low,
-                        close=bar.close,
-                        volume=bar.volume,
+                        open=open_price,
+                        high=high_price,
+                        low=low_price,
+                        close=close_price,
+                        volume=volume,
                         complete=bar.complete,
-                        data_quality=dataset.quality.score,
+                        data_quality=data_quality,
                         manifest_checksum=checksum,
                     )
                 )

@@ -15,16 +15,14 @@ Generated on 2026-08-19 from the predeclared, untuned study windows. This is res
 - Operating costs: £0.00; paid AI, news, data, and hosting were disabled.
 - Look-ahead controls: explicit simulation clock, completed-bar visibility guard, next-bar entry, and malicious future-access regression tests.
 
-The final run command was:
+The final production-path commands were:
 
 ```bash
-env DATABASE_URL=sqlite:///./trading.sqlite3 \
-  .venv/bin/python scripts/run_backtest.py \
-  --preset official-daily \
-  --output data/exports/official-daily.json
+make data-real
+make backtest-real
 ```
 
-The command was run twice after the final simulator-behaviour change. Metrics, trades, curves, order counts, rejection counts, and fingerprints matched exactly.
+The backtest command was run twice after the final simulator-behaviour change. Metrics, trades, curves, order counts, rejection counts, and fingerprints matched exactly. Imported decimals are rounded half-up to the declared database scales before persistence, so SQLite and PostgreSQL produce the same research inputs and fingerprints from the same manifests.
 
 ## Dataset manifests
 

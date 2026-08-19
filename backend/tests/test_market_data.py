@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from app.database.numeric import quantize_data_quality, quantize_price, quantize_volume
 from app.market_data.models import HistoricalBar, InstrumentDefinition
 from app.market_data.validation import validate_bars
 from app.market_data.yahoo import YahooFinanceProvider
@@ -29,6 +30,12 @@ def test_validation_does_not_fill_material_gap() -> None:
     report = validate_bars((bar(start), bar(start + timedelta(days=3))), "1d")
     assert report.missing_intervals == 2
     assert any("not filled" in warning for warning in report.warnings)
+
+
+def test_database_numeric_precision_is_backend_independent() -> None:
+    assert quantize_price(Decimal("7648.10009765625")) == Decimal("7648.1000976563")
+    assert quantize_volume(Decimal("123.123456785")) == Decimal("123.12345679")
+    assert quantize_data_quality(Decimal("0.9914965")) == Decimal("0.991497")
 
 
 @pytest.mark.asyncio

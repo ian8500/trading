@@ -6,7 +6,7 @@ The credential-free provider downloads genuine OHLC bars from Yahoo Finance's pu
 
 Provider symbols in the first daily run are `GBPUSD=X`, `EURUSD=X`, `JPY=X`, `EURGBP=X`, `^FTSE`, `^GSPC`, `^NDX`, `^GDAXI`, and `GC=F`. The hourly run also includes `BTC-USD`. Provider symbols are mapped to stable internal instrument IDs rather than leaking into strategy logic.
 
-Every import writes an ignored CSV plus a JSON manifest containing provider, symbol, download time, requested/actual range, interval, provider timezone, row count, detected gaps, SHA-256 checksum, warnings, and usage note. Downloaded files under `data/historical/` are never committed.
+Every import writes an ignored CSV plus a JSON manifest containing provider, symbol, download time, requested/actual range, interval, provider timezone, row count, detected gaps, SHA-256 checksum, warnings, and usage note. Downloaded files under `data/historical/` are never committed. Before persistence, prices, volume, and quality scores are rounded half-up to their declared `NUMERIC` scales; this prevents database-specific tie rounding from changing a run fingerprint.
 
 Validation rejects duplicate/non-monotonic/naive timestamps, non-positive prices, and material impossible OHLC relationships. A small number of Yahoo FX rows report high/low a few raw-feed ticks inside open or close. The importer may expand only sub-10-basis-point endpoint inconsistencies to include the supplied endpoint, records the count, and rejects larger inconsistencies as explicit gaps. It never fabricates or forward-fills missing bars.
 

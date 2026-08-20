@@ -74,7 +74,9 @@ def strategy_versions(
                 },
                 "outOfSample": {"returnPercent": 0, "sharpe": 0, "degradation": 0},
                 "demo": {"returnPercent": 0, "trades": 0, "durationDays": 0},
-                "promotionState": "APPROVED" if role == "CHAMPION" else "NOT_ELIGIBLE",
+                # A registry role is not promotion evidence. The frozen protocol currently
+                # marks every strategy NOT_ELIGIBLE.
+                "promotionState": "NOT_ELIGIBLE",
                 "parameterSurface": [],
             }
         )

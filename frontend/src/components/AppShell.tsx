@@ -9,8 +9,13 @@ export interface RouteItem {
   icon: IconName;
 }
 
-export const routes: RouteItem[] = [
-  { path: "/", label: "Overview", icon: "overview" },
+export const primaryRoutes: RouteItem[] = [
+  { path: "/", label: "Autopilot", icon: "overview" },
+  { path: "/results", label: "Results", icon: "backtests" },
+];
+
+export const advancedRoutes: RouteItem[] = [
+  { path: "/advanced/overview", label: "Full dashboard", icon: "overview" },
   { path: "/opportunities", label: "Opportunities", icon: "opportunities" },
   { path: "/positions", label: "Positions", icon: "positions" },
   { path: "/backtests", label: "Backtests", icon: "backtests" },
@@ -23,8 +28,11 @@ export const routes: RouteItem[] = [
   { path: "/system", label: "System", icon: "system" },
 ];
 
+export const routes: RouteItem[] = [...primaryRoutes, ...advancedRoutes];
+
 export function AppShell({ children, path, navigate }: { children: ReactNode; path: string; navigate: (path: string) => void }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(() => advancedRoutes.some((route) => route.path === path));
   const { availability, lastError, checkConnection } = useApi();
 
   useEffect(() => setMobileOpen(false), [path]);
@@ -44,7 +52,7 @@ export function AppShell({ children, path, navigate }: { children: ReactNode; pa
           <button type="button" className="sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><Icon name="close" /></button>
         </div>
         <nav aria-label="Primary navigation">
-          {routes.map((route) => {
+          {primaryRoutes.map((route) => {
             const active = path === route.path;
             return (
               <a key={route.path} href={route.path} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={(event) => go(event, route.path)}>
@@ -54,10 +62,21 @@ export function AppShell({ children, path, navigate }: { children: ReactNode; pa
               </a>
             );
           })}
+          <details className="advanced-navigation" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+            <summary><Icon name="system" /><span>Advanced tools</span><Icon name="chevron" /></summary>
+            <div>{advancedRoutes.map((route) => {
+              const active = path === route.path;
+              return (
+                <a key={route.path} href={route.path} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={(event) => go(event, route.path)}>
+                  <Icon name={route.icon} /><span>{route.label}</span>
+                </a>
+              );
+            })}</div>
+          </details>
         </nav>
         <div className="sidebar-safety">
           <div className="safety-lock"><Icon name="lock" /><span>Live trading</span><strong>Disabled</strong></div>
-          <p>V1 is restricted to research, replay, simulation, and IG Demo.</p>
+          <p>Autopilot protects capital and cannot place unattended orders.</p>
         </div>
         <div className="sidebar-footer"><span>Managed allocation</span><strong>£500.00</strong><small>Broker balance is never the sizing base</small></div>
       </aside>
@@ -66,7 +85,7 @@ export function AppShell({ children, path, navigate }: { children: ReactNode; pa
         <div className="global-bar">
           <button type="button" className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Icon name="menu" /></button>
           <div className="global-status">
-            <StatusPill tone="info">Historical research</StatusPill>
+            <StatusPill tone="info">Research autopilot</StatusPill>
             <span className="bar-divider" />
             <span className="desktop-only">Europe/London</span>
           </div>
@@ -74,7 +93,7 @@ export function AppShell({ children, path, navigate }: { children: ReactNode; pa
             <StatusPill tone={availability === "online" ? "positive" : availability === "checking" ? "neutral" : "warning"}>
               {availability === "online" ? "Backend online" : availability === "checking" ? "Checking backend" : "Backend offline"}
             </StatusPill>
-            <StatusPill tone="neutral">Demo off</StatusPill>
+            <StatusPill tone="positive">Cash by default</StatusPill>
             <StatusPill tone="negative">Live disabled</StatusPill>
           </div>
         </div>

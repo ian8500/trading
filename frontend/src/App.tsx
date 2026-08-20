@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell, routes } from "./components/AppShell";
+import { AutopilotPage } from "./pages/AutopilotPage";
 import { BacktestsPage } from "./pages/BacktestsPage";
 import { EventsPage } from "./pages/EventsPage";
 import { IgDemoPage } from "./pages/IgDemoPage";
@@ -8,12 +9,15 @@ import { OpportunitiesPage } from "./pages/OpportunitiesPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PositionsPage } from "./pages/PositionsPage";
 import { ReplayPage } from "./pages/ReplayPage";
+import { ResultsPage } from "./pages/ResultsPage";
 import { RiskPage } from "./pages/RiskPage";
 import { StrategiesPage } from "./pages/StrategiesPage";
 import { SystemPage } from "./pages/SystemPage";
 
 const pageByPath: Record<string, React.ComponentType> = {
-  "/": OverviewPage,
+  "/": AutopilotPage,
+  "/results": ResultsPage,
+  "/advanced/overview": OverviewPage,
   "/opportunities": OpportunitiesPage,
   "/positions": PositionsPage,
   "/backtests": BacktestsPage,
@@ -47,6 +51,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const Page = pageByPath[path] ?? OverviewPage;
+  const Page = pageByPath[path] ?? AutopilotPage;
   return <AppShell path={path} navigate={navigate}><Page /></AppShell>;
 }

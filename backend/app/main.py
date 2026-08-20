@@ -8,15 +8,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.api.routes.ig_demo import shutdown_ig_runtime
+from app.autopilot import autopilot_monitor
 from app.core.config import get_settings
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # Alembic owns schema creation and upgrades in every runtime environment.
+    await autopilot_monitor.start()
     try:
         yield
     finally:
+        await autopilot_monitor.stop()
         await shutdown_ig_runtime()
 
 

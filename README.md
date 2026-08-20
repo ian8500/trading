@@ -17,6 +17,12 @@ make dev
 
 The dashboard is served only on [http://localhost:5173](http://localhost:5173), and the backend health endpoint is [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health). The app starts without IG, AI, news, or macro credentials.
 
+The default dashboard is a safe research autopilot. It automatically revalidates the latest frozen
+research report every 60 seconds and presents one plain-language decision. It cannot place broker
+orders, start IG Demo, or enable live trading. With the current hardened evidence its decision is
+**Stay in cash** because no strategy passed every after-cost promotion gate. Use **Results** for a
+short historical summary; the specialist research screens remain available under **Advanced tools**.
+
 `make dev` starts the Compose stack in the background. Use `make logs` to follow it and `make stop` to stop it. The example database URL uses `127.0.0.1` for host-side import/backtest commands; Compose safely overrides that hostname to its internal `db` service for the backend container.
 
 Never paste IG credentials into GitHub, Codex prompts, issues, documentation, or chat messages. Create a fresh IG Demo API key and enter it only in the local `.env` file.

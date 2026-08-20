@@ -98,6 +98,17 @@ def test_live_readiness_is_informational_only(client: TestClient) -> None:
     assert body["liveExecutionEnabled"] is False
 
 
+def test_autopilot_is_automatic_and_cannot_execute_orders(client: TestClient) -> None:
+    response = client.get("/api/v1/autopilot/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["automaticMonitoring"] is True
+    assert body["state"] in {"STAY_IN_CASH", "HUMAN_REVIEW_REQUIRED"}
+    assert body["orderExecutionEnabled"] is False
+    assert body["demoTradingEnabled"] is False
+    assert body["liveTradingEnabled"] is False
+
+
 @pytest.mark.parametrize(
     ("path", "payload"),
     (

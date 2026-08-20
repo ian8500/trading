@@ -190,6 +190,39 @@ export interface DashboardSnapshot {
   services: ServiceHealth[];
 }
 
+export interface AutopilotStrategyStatus {
+  name: string;
+  status: "NOT_ELIGIBLE" | "RESEARCH_GATES_PASSED_PROMOTION_BLOCKED";
+  returnPercent: number;
+  profitFactor: number;
+  trades: number;
+  maximumDrawdownPercent: number;
+  unmetGateCount: number;
+}
+
+export interface AutopilotSnapshot {
+  mode: "SAFE_RESEARCH_AUTOPILOT";
+  state: "STAY_IN_CASH" | "HUMAN_REVIEW_REQUIRED";
+  headline: string;
+  summary: string;
+  checkedAt: string;
+  nextCheckAt: string;
+  refreshSeconds: number;
+  automaticMonitoring: boolean;
+  evidenceStatus: "VERIFIED" | "MISSING" | "INVALID";
+  evidenceGeneratedAt: string | null;
+  protocolVersion: string;
+  protocolFingerprint: string;
+  reportFingerprint: string | null;
+  implementationDigest: string;
+  strategies: AutopilotStrategyStatus[];
+  reasons: string[];
+  safeguards: string[];
+  demoTradingEnabled: boolean;
+  liveTradingEnabled: boolean;
+  orderExecutionEnabled: boolean;
+}
+
 export interface BacktestMetrics {
   startingEquity: number;
   finalEquity: number;

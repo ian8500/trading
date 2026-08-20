@@ -27,18 +27,54 @@ describe("trading dashboard", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("connection refused")));
   });
 
-  it("shows the managed-capital overview and explicit offline safety state", async () => {
+  it("shows the safe research autopilot and explicit offline safety state", async () => {
     renderAt("/");
-    expect(screen.getByRole("heading", { name: "Portfolio overview" })).toBeInTheDocument();
-    expect(screen.getByText("£500.00", { selector: ".metric-value" })).toBeInTheDocument();
-    expect(screen.getByText("£551.10", { selector: ".metric-value" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Research autopilot" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Stay in cash" })).toBeInTheDocument();
+    expect(screen.getByText("Orders disabled", { selector: ".status-pill" })).toBeInTheDocument();
     expect(await screen.findByText(/Backend unavailable\./)).toBeInTheDocument();
     expect(screen.getByText("Live disabled", { selector: ".status-pill" })).toBeInTheDocument();
+  });
+
+  it("renders a verified automatic decision without enabling execution", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/health")) return jsonResponse({ status: "ok" });
+      if (url.endsWith("/autopilot/status")) return jsonResponse({
+        mode: "SAFE_RESEARCH_AUTOPILOT",
+        state: "STAY_IN_CASH",
+        headline: "Stay in cash",
+        summary: "No tested strategy passed every after-cost safety gate.",
+        checkedAt: "2026-08-20T08:00:00Z",
+        nextCheckAt: "2026-08-20T08:01:00Z",
+        refreshSeconds: 60,
+        automaticMonitoring: true,
+        evidenceStatus: "VERIFIED",
+        evidenceGeneratedAt: "2026-08-20T07:00:00Z",
+        protocolVersion: "1.2.0",
+        protocolFingerprint: "a".repeat(64),
+        reportFingerprint: "b".repeat(64),
+        implementationDigest: "c".repeat(64),
+        strategies: [],
+        reasons: ["Every tested strategy is NOT_ELIGIBLE."],
+        safeguards: ["Research autopilot cannot submit broker orders."],
+        demoTradingEnabled: false,
+        liveTradingEnabled: false,
+        orderExecutionEnabled: false,
+      });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderAt("/");
+    expect(await screen.findByText("Evidence VERIFIED")).toBeInTheDocument();
+    expect(screen.getByText("Research autopilot cannot submit broker orders.")).toBeInTheDocument();
+    expect(screen.getByText("Orders disabled", { selector: ".status-pill" })).toBeInTheDocument();
   });
 
   it("navigates without reloading and filters the opportunity audit table", async () => {
     const user = userEvent.setup();
     renderAt("/");
+    await user.click(screen.getByText("Advanced tools"));
     await user.click(screen.getByRole("link", { name: "Opportunities" }));
     expect(screen.getByRole("heading", { name: "Opportunity leaderboard" })).toBeInTheDocument();
     const search = screen.getByRole("textbox", { name: "Search opportunities" });

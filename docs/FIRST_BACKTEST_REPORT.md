@@ -1,5 +1,9 @@
 # First genuine historical research report
 
+> Historical V1 evidence: this report intentionally preserves the original static-conversion,
+> uniform-cost run. It is not the hardened market-economics or frozen walk-forward result. See
+> `RESEARCH_PROTOCOL.md` and the later hardened report for the current research contract.
+
 Generated on 2026-08-19 from the predeclared, untuned study windows. This is research evidence, not investment advice or a claim of future performance. All tested trading variants lost money after modeled costs; cash was the best result.
 
 ## Reproduction contract

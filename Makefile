@@ -2,7 +2,7 @@ SHELL := /bin/sh
 PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
 
-.PHONY: setup dev logs stop test lint typecheck secret-scan backtest-smoke backtest-real data-real frontend-test frontend-build migrate
+.PHONY: setup dev logs stop test lint typecheck secret-scan backtest-smoke backtest-real research-protocol data-real frontend-test frontend-build migrate
 
 setup:
 	python3 -m venv .venv
@@ -44,6 +44,9 @@ data-real:
 
 backtest-real:
 	$(PYTHON) scripts/run_backtest.py --preset official-daily --output data/exports/official-daily.json
+
+research-protocol:
+	$(PYTHON) scripts/run_research_protocol.py --output data/exports/research-protocol.json
 
 frontend-test:
 	cd frontend && npm test -- --run

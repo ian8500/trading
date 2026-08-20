@@ -30,12 +30,17 @@ make typecheck
 make secret-scan
 make data-real
 make backtest-real
+make research-protocol
 make backtest-smoke
 make stop
 ```
 
 Downloaded market data and exported results are deliberately ignored by Git. See `BACKTESTING.md`, `DATA_SOURCES.md`, `RISK.md`, `SECURITY.md`, and `IG_INTEGRATION.md` for exact assumptions and limitations.
 
-The checked-in [`docs/FIRST_BACKTEST_REPORT.md`](docs/FIRST_BACKTEST_REPORT.md) records the exact genuine-data checksums and untuned losing first-pass results; provider bars and generated exports remain local-only.
+The checked-in [`docs/FIRST_BACKTEST_REPORT.md`](docs/FIRST_BACKTEST_REPORT.md) records the original
+genuine-data, static-conversion first pass. The frozen protocol and its strict promotion gates are
+defined in [`docs/RESEARCH_PROTOCOL.md`](docs/RESEARCH_PROTOCOL.md); hardened results are recorded
+in [`docs/HARDENED_RESEARCH_REPORT.md`](docs/HARDENED_RESEARCH_REPORT.md) so the original evidence
+is not silently rewritten. Provider bars and generated exports remain local-only.
 
 No open-source licence is granted by this repository.

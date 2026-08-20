@@ -18,6 +18,13 @@ class CostPreset(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class CostModel:
+    """Execution-cost inputs in basis points.
+
+    Slippage, commission, and currency conversion are charged per side.
+    ``spread_bps`` represents the full round-trip spread, and financing is per
+    elapsed day. Guaranteed-stop premium applies only when explicitly booked.
+    """
+
     preset: CostPreset = CostPreset.REALISTIC
     spread_bps: Decimal = Decimal("2.0")
     slippage_bps_per_side: Decimal = Decimal("0.5")
@@ -132,12 +139,6 @@ def calculate_exit_costs(
     slippage = position.entry_slippage_cost + monetary_price_distance(
         exit_slippage, position.quantity, instrument
     )
-    entry_notional = (
-        position.requested_entry
-        * position.quantity
-        * instrument.contract_size
-        * instrument.currency_conversion
-    )
     exit_notional = (
         requested_exit
         * position.quantity
@@ -145,14 +146,15 @@ def calculate_exit_costs(
         * instrument.currency_conversion
     )
     commission = money(
-        (entry_notional + exit_notional) * model.commission_bps_per_side / Decimal("10000")
+        position.entry_commission + exit_notional * model.commission_bps_per_side / Decimal("10000")
     )
     holding_days = Decimal(max(0, holding_seconds)) / Decimal("86400")
     financing = money(
-        entry_notional * model.financing_bps_per_day / Decimal("10000") * holding_days
+        position.entry_notional * model.financing_bps_per_day / Decimal("10000") * holding_days
     )
-    premium = money(entry_notional * model.guaranteed_stop_premium_bps / Decimal("10000"))
+    premium = position.entry_guaranteed_stop_premium
     conversion = money(
-        abs(exit_notional - entry_notional) * model.currency_conversion_bps / Decimal("10000")
+        position.entry_currency_conversion_cost
+        + exit_notional * model.currency_conversion_bps / Decimal("10000")
     )
     return ExitCosts(spread, slippage, financing, commission, premium, conversion)

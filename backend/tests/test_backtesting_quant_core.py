@@ -94,9 +94,9 @@ def bars_for_exit(high: str, low: str, *, second_open: str = "100") -> tuple[Bar
 def test_next_bar_entry_and_long_winner() -> None:
     bars = bars_for_exit("106", "99")
     result = HistoricalBacktestEngine(make_instrument(), FixedStrategy(), risk_limits=limits()).run(
-        bars, BacktestConfig(cost_preset="ZERO")
+        bars, BacktestConfig(cost_preset="ZERO", bar_interval="1h")
     )
-    assert result.trades[0].entry_timestamp == bars[1].timestamp
+    assert result.trades[0].entry_timestamp == bars[0].timestamp
     assert result.trades[0].exit_reason is ExitReason.TARGET
     assert result.trades[0].gross_pnl == D("10.00")
 
@@ -104,10 +104,16 @@ def test_next_bar_entry_and_long_winner() -> None:
 def test_short_winner_and_short_loser_accounting() -> None:
     winner = HistoricalBacktestEngine(
         make_instrument(), FixedStrategy(Direction.SHORT), risk_limits=limits()
-    ).run(bars_for_exit("101", "94"), BacktestConfig(cost_preset="ZERO"))
+    ).run(
+        bars_for_exit("101", "94"),
+        BacktestConfig(cost_preset="ZERO", bar_interval="1h"),
+    )
     loser = HistoricalBacktestEngine(
         make_instrument(), FixedStrategy(Direction.SHORT), risk_limits=limits()
-    ).run(bars_for_exit("106", "99"), BacktestConfig(cost_preset="ZERO"))
+    ).run(
+        bars_for_exit("106", "99"),
+        BacktestConfig(cost_preset="ZERO", bar_interval="1h"),
+    )
     assert winner.trades[0].gross_pnl == D("10.00")
     assert loser.trades[0].gross_pnl == D("-10.00")
 
@@ -117,11 +123,19 @@ def test_conservative_intrabar_ambiguity_chooses_stop() -> None:
     engine = HistoricalBacktestEngine(make_instrument(), FixedStrategy(), risk_limits=limits())
     conservative = engine.run(
         bars,
-        BacktestConfig(cost_preset="ZERO", fill_policy=FillPolicy.CONSERVATIVE),
+        BacktestConfig(
+            cost_preset="ZERO",
+            fill_policy=FillPolicy.CONSERVATIVE,
+            bar_interval="1h",
+        ),
     )
     target_first = engine.run(
         bars,
-        BacktestConfig(cost_preset="ZERO", fill_policy=FillPolicy.TARGET_FIRST),
+        BacktestConfig(
+            cost_preset="ZERO",
+            fill_policy=FillPolicy.TARGET_FIRST,
+            bar_interval="1h",
+        ),
     )
     assert conservative.trades[0].exit_reason is ExitReason.STOP
     assert conservative.trades[0].net_pnl == D("-10.00")
@@ -137,7 +151,7 @@ def test_gap_beyond_stop_fills_at_worse_open() -> None:
         Bar(start + timedelta(hours=2), D("90"), D("91"), D("89"), D("90"), instrument_id="X"),
     )
     result = HistoricalBacktestEngine(make_instrument(), FixedStrategy(), risk_limits=limits()).run(
-        bars, BacktestConfig(cost_preset="ZERO")
+        bars, BacktestConfig(cost_preset="ZERO", bar_interval="1h")
     )
     assert result.trades[0].exit_reason is ExitReason.STOP
     assert result.trades[0].requested_exit == D("90")

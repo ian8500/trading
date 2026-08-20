@@ -2,21 +2,51 @@
 
 from typing import Any
 
+from .conversion import (
+    ConversionBoundary,
+    ConversionMode,
+    ConversionQuote,
+    ConversionStalenessPolicy,
+    ConversionTimingPolicy,
+    ConversionUnavailableError,
+    QuoteToGbpConversionPolicy,
+    QuoteToGbpResolver,
+    modeled_bar_open,
+)
 from .data_guard import FutureDataAccessError, GuardedBarSeries, MarketView
+from .fill_revalidation import FillRiskRevalidation, FillRiskRevalidationPolicy
 from .models import Bar, FillPolicy
+from .research_costs import ResearchCostAssumption, ResearchCostSchedule
+from .sessions import MarketSessionPolicy, SessionDecision, SessionPhase
 
 __all__ = [
     "BacktestConfig",
     "BacktestEngine",
     "BacktestResult",
     "Bar",
+    "ConversionBoundary",
+    "ConversionMode",
+    "ConversionQuote",
+    "ConversionStalenessPolicy",
+    "ConversionTimingPolicy",
+    "ConversionUnavailableError",
     "FillPolicy",
+    "FillRiskRevalidation",
+    "FillRiskRevalidationPolicy",
     "FutureDataAccessError",
     "GuardedBarSeries",
     "HistoricalBacktestEngine",
+    "MarketSessionPolicy",
     "MarketView",
     "PortfolioBacktestEngine",
     "PortfolioBacktestResult",
+    "QuoteToGbpConversionPolicy",
+    "QuoteToGbpResolver",
+    "ResearchCostAssumption",
+    "ResearchCostSchedule",
+    "SessionDecision",
+    "SessionPhase",
+    "modeled_bar_open",
 ]
 
 

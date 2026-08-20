@@ -24,6 +24,10 @@ class InstrumentDefinitionLike(Protocol):
     point_value: Decimal
     minimum_size: Decimal
     margin_factor: Decimal
+    contract_size: Decimal
+    size_step: Decimal
+    economics_version: str
+    economics_provenance: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +52,8 @@ class Instrument:
     min_limit_distance: Decimal = ZERO
     correlation_cluster: str | None = None
     exposure_tags: frozenset[str] = field(default_factory=frozenset)
+    economics_version: str = "generic-instrument-v1"
+    economics_provenance: str = "Caller-supplied instrument economics."
 
     def __post_init__(self) -> None:
         decimal_fields = (
@@ -84,6 +90,18 @@ class Instrument:
             asset_class=AssetClass(raw_asset_class),
             quote_currency=str(getattr(definition, "currency", "GBP")),
             point_value=as_decimal(getattr(definition, "point_value", ONE)),
+            contract_size=as_decimal(getattr(definition, "contract_size", ONE)),
             min_deal_size=as_decimal(getattr(definition, "minimum_size", Decimal("0.01"))),
+            size_step=as_decimal(getattr(definition, "size_step", Decimal("0.01"))),
             margin_factor=as_decimal(getattr(definition, "margin_factor", Decimal("0.05"))),
+            economics_version=str(
+                getattr(definition, "economics_version", "research-contract-proxy-v1")
+            ),
+            economics_provenance=str(
+                getattr(
+                    definition,
+                    "economics_provenance",
+                    "Versioned research contract proxy only; not an IG product specification.",
+                )
+            ),
         )

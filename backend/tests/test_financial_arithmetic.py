@@ -8,6 +8,7 @@ from app.backtesting.costs import CostModel, CostPreset
 from app.backtesting.engine import BacktestConfig, HistoricalBacktestEngine
 from app.backtesting.metrics import calculate_metrics
 from app.backtesting.models import EquityPoint, ExitReason
+from app.core.decimal import money
 from app.instruments.models import AssetClass, Instrument
 from app.opportunities import Direction, OpportunityCandidate
 from app.portfolio import ManagedCapitalLedger, PortfolioRiskState
@@ -97,7 +98,7 @@ class HoldStrategy(Strategy):
         )
 
 
-def test_spread_slippage_financing_commission_premium_and_conversion_are_booked() -> None:
+def test_cost_components_are_booked_but_unrequested_guaranteed_stop_is_not() -> None:
     instrument = Instrument(
         "COST",
         "Cost market",
@@ -133,7 +134,7 @@ def test_spread_slippage_financing_commission_premium_and_conversion_are_booked(
         commission_bps_per_side=D("1"),
         financing_bps_per_day=D("2"),
         guaranteed_stop_premium_bps=D("1"),
-        currency_conversion_bps=D("1000"),
+        currency_conversion_bps=D("100"),
     )
     result = HistoricalBacktestEngine(
         instrument,
@@ -148,12 +149,14 @@ def test_spread_slippage_financing_commission_premium_and_conversion_are_booked(
     ).run(bars, BacktestConfig(maximum_holding_bars=2))
     trade = result.trades[0]
     assert trade.exit_reason is ExitReason.TIME
-    assert trade.holding_seconds == 86400
+    assert trade.holding_seconds == 172800
     assert trade.spread_cost > D("0")
     assert trade.slippage_cost > D("0")
     assert trade.financing_cost > D("0")
+    assert trade.financing_cost == money(trade.fill_notional * D("2") / D("10000") * D("2"))
     assert trade.commission > D("0")
-    assert trade.guaranteed_stop_premium > D("0")
+    # Ordinary simulated stops are not guaranteed; the proxy is not charged.
+    assert trade.guaranteed_stop_premium == D("0")
     assert trade.currency_conversion_cost > D("0")
     assert trade.net_pnl == trade.gross_pnl - trade.total_cost
 

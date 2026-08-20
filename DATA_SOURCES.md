@@ -8,9 +8,20 @@ Provider symbols in the first daily run are `GBPUSD=X`, `EURUSD=X`, `JPY=X`, `EU
 
 Every import writes an ignored CSV plus a JSON manifest containing provider, symbol, download time, requested/actual range, interval, provider timezone, row count, detected gaps, SHA-256 checksum, warnings, and usage note. Downloaded files under `data/historical/` are never committed. Before persistence, prices, volume, and quality scores are rounded half-up to their declared `NUMERIC` scales; this prevents database-specific tie rounding from changing a run fingerprint.
 
+When a traded market settles in USD, EUR, or JPY, the backtest service loads the required GBP/USD,
+EUR/GBP, and/or USD/JPY observations as causal conversion references. A reference series can be
+loaded even when it is not in the requested trading universe; reference-only bars cannot produce
+candidates, orders, trades, or ledger entries. Their manifests and completed-bar payloads still
+enter the reproducibility fingerprint.
+
 Validation rejects duplicate/non-monotonic/naive timestamps, non-positive prices, and material impossible OHLC relationships. A small number of Yahoo FX rows report high/low a few raw-feed ticks inside open or close. The importer may expand only sub-10-basis-point endpoint inconsistencies to include the supplied endpoint, records the count, and rejects larger inconsistencies as explicit gaps. It never fabricates or forward-fills missing bars.
 
 Daily gaps include legitimate exchange holidays; warnings are retained because a generic downloader cannot infer every historical venue calendar. Futures data can contain roll/continuous-contract effects. Equity-index and futures timestamps follow provider/exchange conventions. Yahoo volume can be zero for FX.
+
+Yahoo OHLC does not contain historical IG spreads, financing, commissions, minimum deal sizes, or
+opening-hours history. The simulator therefore uses explicitly versioned research proxies for
+those fields and stores `historical_ig_quotes: false` with each cost assumption. They must not be
+described as observed broker terms.
 
 ## CSV
 

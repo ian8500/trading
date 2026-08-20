@@ -1,18 +1,26 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from app.api.routes.replay import _build_replay
+from app.backtesting.fill_revalidation import FillRiskRevalidationPolicy
+from app.backtesting.fingerprint import SIMULATOR_BEHAVIOR_VERSION
 from app.database.base import Base
 from app.database.models import (
     BacktestRecord,
+    DataManifestRecord,
     HistoricalBarRecord,
     InstrumentRecord,
     OpportunityRecord,
 )
-from app.jobs.backtest_service import _strategy_version_label
+from app.jobs.backtest_service import (
+    BacktestRunRequest,
+    _strategy_version_label,
+    execute_cash_baseline,
+)
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 
@@ -193,3 +201,125 @@ def test_replay_fails_closed_when_pinned_revision_is_unavailable() -> None:
 
         with pytest.raises(HTTPException, match="pinned replay data revision is unavailable"):
             _build_replay(session, record)
+
+
+def test_service_loads_and_persists_causal_conversion_reference_economics() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    start = datetime(2025, 1, 2, 23, tzinfo=UTC)
+    end = datetime(2025, 1, 5, 23, tzinfo=UTC)
+    checksums = {"SP500": "s" * 64, "GBPUSD": "g" * 64}
+    with Session(engine, expire_on_commit=False) as session:
+        instruments: dict[str, InstrumentRecord] = {}
+        for symbol, name, asset_class, currency, provider_symbol in (
+            ("SP500", "S&P 500", "INDEX", "USD", "^GSPC"),
+            ("GBPUSD", "GBP/USD", "FX", "USD", "GBPUSD=X"),
+        ):
+            row = InstrumentRecord(
+                symbol=symbol,
+                name=name,
+                asset_class=asset_class,
+                currency=currency,
+                provider_symbol=provider_symbol,
+                ig_epic=None,
+                active=True,
+                capabilities={},
+            )
+            session.add(row)
+            session.flush()
+            instruments[symbol] = row
+            session.add(
+                DataManifestRecord(
+                    provider="Yahoo Finance",
+                    instrument=symbol,
+                    provider_symbol=provider_symbol,
+                    downloaded_at=end,
+                    start_at=start - timedelta(days=7),
+                    end_at=end,
+                    interval="1d",
+                    timezone="UTC",
+                    row_count=4,
+                    missing_intervals=0,
+                    checksum=checksums[symbol],
+                    usage_note="test research data",
+                    warnings=[],
+                    cache_path=None,
+                )
+            )
+
+        for index in range(3):
+            timestamp = start + timedelta(days=index)
+            for symbol, price in (("SP500", "5000"), ("GBPUSD", "1.25")):
+                value = Decimal(price)
+                session.add(
+                    HistoricalBarRecord(
+                        instrument_id=instruments[symbol].id,
+                        provider="Yahoo Finance",
+                        interval="1d",
+                        timestamp=timestamp,
+                        open=value,
+                        high=value + Decimal("1"),
+                        low=value - Decimal("1"),
+                        close=value,
+                        volume=Decimal("100"),
+                        complete=True,
+                        data_quality=Decimal("1"),
+                        manifest_checksum=checksums[symbol],
+                    )
+                )
+        # A pre-window completed observation seeds modeled-open conversion.
+        session.add(
+            HistoricalBarRecord(
+                instrument_id=instruments["GBPUSD"].id,
+                provider="Yahoo Finance",
+                interval="1d",
+                timestamp=start - timedelta(days=1),
+                open=Decimal("1.24"),
+                high=Decimal("1.25"),
+                low=Decimal("1.23"),
+                close=Decimal("1.24"),
+                volume=Decimal("100"),
+                complete=True,
+                data_quality=Decimal("1"),
+                manifest_checksum=checksums["GBPUSD"],
+            )
+        )
+        session.commit()
+
+        request = BacktestRunRequest(
+            name="service realism fixture",
+            strategy="Quant Baseline",
+            symbols=("SP500",),
+            start=start,
+            end=end,
+            interval="1d",
+        )
+        record = execute_cash_baseline(session, request)
+
+        config = record.configuration
+        assert config["simulator_behavior_version"] == SIMULATOR_BEHAVIOR_VERSION
+        assert config["conversion_reference_symbols"] == ["GBPUSD"]
+        assert config["conversion_reference_checksums"] == {"GBPUSD": checksums["GBPUSD"]}
+        assert config["conversion_policy"]["mode"] == "CAUSAL_COMPLETED_BARS"
+        assert config["conversion_timing_policy"]["policy_id"] == "modeled-bar-open-conversion-v1"
+        assert (
+            config["fill_revalidation_policy"]["policy_id"]
+            == "fill-risk-revalidation-v1-reservation-capped"
+        )
+        assert "static_quote_to_gbp" not in config
+        assumption = config["research_cost_assumptions"]["SP500"]
+        assert assumption["historical_ig_quotes"] is False
+        assert assumption["assumption_id"].startswith("instrument-research-costs-v1:SP500")
+        assert set(record.data_manifest_ids) == {
+            manifest.id for manifest in session.scalars(select(DataManifestRecord)).all()
+        }
+        changed_policy = execute_cash_baseline(
+            session,
+            replace(
+                request,
+                fill_revalidation_policy=FillRiskRevalidationPolicy(
+                    policy_id="fill-risk-revalidation-test-variant"
+                ),
+            ),
+        )
+        assert changed_policy.reproducibility_hash != record.reproducibility_hash

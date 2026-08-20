@@ -8,9 +8,11 @@ strategy, AI response, dashboard action, or broker adapter cannot bypass it: bro
 
 The internal ledger begins at £500 and is separate from the often much larger IG Demo balance.
 Position risk is calculated from current realised managed equity, stop distance, point/contract
-value, quote-to-GBP conversion, expected execution costs, gap allowance, size step, and minimum deal
-size. Quantities are rounded down. If the minimum size exceeds permitted loss or available margin,
-the trade is rejected rather than enlarged.
+value, the causal quote-to-GBP rate available at approval, expected execution costs, gap allowance,
+size step, and minimum deal size. Quantities are rounded down. If the minimum size exceeds permitted
+loss or available margin, the trade is rejected rather than enlarged. Approval, entry, marking, and
+exit conversions are audited separately; an execution bar's closing FX observation cannot affect
+its opening fill.
 
 Profile risk per trade is Conservative 1%, Standard 2%, Aggressive 4%, or Experimental 6%. These are
 hard maxima, not targets. Aggregate open risk, per-market exposure, effective leverage, margin,
@@ -32,8 +34,9 @@ bypassing portfolio limits.
 
 Default hard limits include three concurrent positions, 6% Standard open risk, 3x individual market
 exposure/effective leverage, 50% margin usage, and 4% same-direction correlated risk. Instrument and
-account capability checks can be stricter. Static research currency conversions are disclosed in
-`BACKTESTING.md`; IG Demo uses discovered market metadata and account-specific rules.
+account capability checks can be stricter. Historical point values, contract sizes, minimums,
+steps, margins, costs, and sessions are versioned research-contract proxies, not IG specifications.
+IG Demo continues to use separately discovered market metadata and account-specific rules.
 
 ## Circuit breakers
 

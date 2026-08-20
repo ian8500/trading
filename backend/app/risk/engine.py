@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.core.clock import Clock, SystemClock
-from app.core.decimal import ZERO
+from app.core.decimal import ZERO, money
 from app.instruments import Instrument
 from app.opportunities import OpportunityCandidate
 from app.portfolio import ManagedCapitalLedger, PortfolioRiskState
@@ -47,11 +47,12 @@ class RiskEngine:
         *,
         strategy_health: StrategyHealth = StrategyHealth.NORMAL,
         now: datetime | None = None,
+        managed_equity: Decimal | None = None,
     ) -> RiskDecision:
         portfolio = portfolio or PortfolioRiskState()
         timestamp = now or self.clock.now()
         self.refresh_period_boundaries(timestamp)
-        equity = ledger.equity
+        equity = ledger.equity if managed_equity is None else money(managed_equity)
         reasons: list[str] = list(self.breakers.rejection_reasons())
 
         age = timestamp - candidate.timestamp
@@ -171,7 +172,17 @@ class RiskEngine:
             if reason not in reasons:
                 reasons.append(reason)
         approved = not reasons and sizing.accepted
-        decision_id = self._decision_id(candidate, equity, effective_risk_fraction, tuple(reasons))
+        decision_id = self._decision_id(
+            candidate,
+            instrument,
+            equity,
+            effective_risk_fraction,
+            sizing.size,
+            sizing.actual_risk,
+            sizing.notional,
+            sizing.margin_required,
+            tuple(reasons),
+        )
         return RiskDecision(
             decision_id=decision_id,
             approved=approved,
@@ -194,6 +205,7 @@ class RiskEngine:
         *,
         strategy_health: StrategyHealth = StrategyHealth.NORMAL,
         now: datetime | None = None,
+        managed_equity: Decimal | None = None,
     ) -> ApprovedOrder | None:
         decision = self.evaluate(
             candidate,
@@ -202,6 +214,7 @@ class RiskEngine:
             portfolio,
             strategy_health=strategy_health,
             now=now,
+            managed_equity=managed_equity,
         )
         if not decision.approved:
             return None
@@ -216,8 +229,13 @@ class RiskEngine:
     @staticmethod
     def _decision_id(
         candidate: OpportunityCandidate,
+        instrument: Instrument,
         equity: Decimal,
         risk_fraction: Decimal,
+        position_size: Decimal,
+        planned_risk: Decimal,
+        notional: Decimal,
+        margin: Decimal,
         reasons: tuple[str, ...],
     ) -> str:
         payload = "|".join(
@@ -227,6 +245,16 @@ class RiskEngine:
                 candidate.strategy_version_id,
                 str(equity),
                 str(risk_fraction),
+                instrument.economics_version,
+                str(instrument.point_value),
+                str(instrument.contract_size),
+                str(instrument.min_deal_size),
+                str(instrument.size_step),
+                str(instrument.currency_conversion),
+                str(position_size),
+                str(planned_risk),
+                str(notional),
+                str(margin),
                 *reasons,
             )
         )

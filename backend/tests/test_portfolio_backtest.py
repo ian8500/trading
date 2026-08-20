@@ -158,7 +158,7 @@ def test_candidates_are_ranked_cross_market_and_pending_risk_is_reserved() -> No
     )
     result = engine.run(
         {"A": data("A"), "B": data("B")},
-        BacktestConfig(cost_preset=CostPreset.ZERO),
+        BacktestConfig(cost_preset=CostPreset.ZERO, bar_interval="1h"),
     )
     rankings = [event for event in result.audit_trail if event.event_type == "CANDIDATES_RANKED"]
     assert rankings[0].details["ranking"][0]["instrument_id"] == "A"
@@ -195,7 +195,7 @@ def test_shared_ledger_compounds_before_later_market_is_sized() -> None:
         risk_limits=portfolio_limits(),
     ).run(
         {"A": data("A"), "B": data("B")},
-        BacktestConfig(cost_preset=CostPreset.ZERO),
+        BacktestConfig(cost_preset=CostPreset.ZERO, bar_interval="1h"),
     )
     assert len(result.trades) == 2
     assert result.trades[0].instrument_id == "A"
@@ -265,8 +265,14 @@ def test_multi_market_event_stream_and_result_are_reproducible() -> None:
     strategies = {"A": ScheduledSignal("A", 1), "B": ScheduledSignal("B", 2)}
     engine = PortfolioBacktestEngine(instruments, strategies, risk_limits=portfolio_limits())
     source = {"A": data("A"), "B": data("B")}
-    first = engine.run(source, BacktestConfig(cost_preset=CostPreset.ZERO, seed=99))
-    second = engine.run(source, BacktestConfig(cost_preset=CostPreset.ZERO, seed=99))
+    first = engine.run(
+        source,
+        BacktestConfig(cost_preset=CostPreset.ZERO, seed=99, bar_interval="1h"),
+    )
+    second = engine.run(
+        source,
+        BacktestConfig(cost_preset=CostPreset.ZERO, seed=99, bar_interval="1h"),
+    )
     assert first.run_fingerprint == second.run_fingerprint
     assert first.trades == second.trades
     assert first.audit_trail == second.audit_trail
@@ -285,7 +291,10 @@ def test_portfolio_constructor_passes_default_taper_to_risk_gate() -> None:
         ),
         risk_taper=True,
     )
-    result = engine.run({"A": data("A")}, BacktestConfig(cost_preset=CostPreset.ZERO))
+    result = engine.run(
+        {"A": data("A")},
+        BacktestConfig(cost_preset=CostPreset.ZERO, bar_interval="1h"),
+    )
     decision = next(event for event in result.audit_trail if event.event_type == "RISK_DECISION")
     assert decision.details["approved"] is True
     assert decision.details["risk_fraction"] == "0.04"
@@ -313,18 +322,18 @@ def test_portfolio_fingerprint_covers_all_outcome_inputs() -> None:
         )
         return engine.run(
             {"A": selected_bars or source},
-            config or BacktestConfig(),
+            config or BacktestConfig(bar_interval="1h"),
         ).run_fingerprint
 
     baseline = run_fingerprint()
     config_variants = (
-        BacktestConfig(starting_equity=D("600")),
-        BacktestConfig(execution_delay_bars=2),
-        BacktestConfig(maximum_holding_bars=1),
-        BacktestConfig(operational_costs=D("1")),
-        BacktestConfig(seed=99),
-        BacktestConfig(close_positions_at_end=False),
-        BacktestConfig(cost_preset=CostPreset.STRESSED),
+        BacktestConfig(starting_equity=D("600"), bar_interval="1h"),
+        BacktestConfig(execution_delay_bars=2, bar_interval="1h"),
+        BacktestConfig(maximum_holding_bars=1, bar_interval="1h"),
+        BacktestConfig(operational_costs=D("1"), bar_interval="1h"),
+        BacktestConfig(seed=99, bar_interval="1h"),
+        BacktestConfig(close_positions_at_end=False, bar_interval="1h"),
+        BacktestConfig(cost_preset=CostPreset.STRESSED, bar_interval="1h"),
     )
     for config in config_variants:
         assert run_fingerprint(config=config) != baseline
@@ -355,7 +364,8 @@ def test_portfolio_fingerprint_covers_simulator_behavior_version(
         risk_limits=portfolio_limits(),
     )
     source = {"A": data("A")}
-    baseline = engine.run(source).run_fingerprint
+    config = BacktestConfig(bar_interval="1h")
+    baseline = engine.run(source, config).run_fingerprint
 
     monkeypatch.setattr(
         portfolio_engine_module,
@@ -363,4 +373,4 @@ def test_portfolio_fingerprint_covers_simulator_behavior_version(
         "historical-simulator-test-version",
     )
 
-    assert engine.run(source).run_fingerprint != baseline
+    assert engine.run(source, config).run_fingerprint != baseline

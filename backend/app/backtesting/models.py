@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from app.core.clock import ensure_utc
-from app.core.decimal import ZERO, as_decimal
+from app.core.decimal import ONE, ZERO, as_decimal
 from app.opportunities import Direction
 
 
@@ -99,6 +99,16 @@ class Position:
     regime: str
     candidate_score: Decimal
     risk_decision_id: str
+    fill_risk_decision_id: str = ""
+    approval_planned_risk: Decimal = ZERO
+    approval_notional: Decimal = ZERO
+    approval_margin: Decimal = ZERO
+    approval_currency_conversion: Decimal = ONE
+    entry_currency_conversion: Decimal = ONE
+    entry_notional: Decimal = ZERO
+    entry_commission: Decimal = ZERO
+    entry_guaranteed_stop_premium: Decimal = ZERO
+    entry_currency_conversion_cost: Decimal = ZERO
     bars_held: int = 0
     maximum_adverse_excursion: Decimal = ZERO
     maximum_favourable_excursion: Decimal = ZERO
@@ -136,6 +146,16 @@ class Trade:
     regime: str
     opportunity_score: Decimal
     risk_decision_id: str
+    fill_risk_decision_id: str = ""
+    approval_planned_risk: Decimal = ZERO
+    approval_notional: Decimal = ZERO
+    approval_margin: Decimal = ZERO
+    fill_planned_risk: Decimal = ZERO
+    fill_notional: Decimal = ZERO
+    fill_margin: Decimal = ZERO
+    approval_currency_conversion: Decimal = ONE
+    entry_currency_conversion: Decimal = ONE
+    exit_currency_conversion: Decimal = ONE
     maximum_adverse_excursion: Decimal = ZERO
     maximum_favourable_excursion: Decimal = ZERO
 

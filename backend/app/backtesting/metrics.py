@@ -47,6 +47,8 @@ class BacktestMetrics:
     slippage_cost: Decimal
     financing_cost: Decimal
     commission: Decimal
+    guaranteed_stop_premium: Decimal
+    currency_conversion_cost: Decimal
     operational_costs: Decimal
     exposure_percentage: Decimal
     average_effective_leverage: Decimal
@@ -242,6 +244,12 @@ def calculate_metrics(
         slippage_cost=money(sum((trade.slippage_cost for trade in trades), ZERO)),
         financing_cost=money(sum((trade.financing_cost for trade in trades), ZERO)),
         commission=money(sum((trade.commission for trade in trades), ZERO)),
+        guaranteed_stop_premium=money(
+            sum((trade.guaranteed_stop_premium for trade in trades), ZERO)
+        ),
+        currency_conversion_cost=money(
+            sum((trade.currency_conversion_cost for trade in trades), ZERO)
+        ),
         operational_costs=operating_cost,
         exposure_percentage=exposure,
         average_effective_leverage=average_leverage,

@@ -2,43 +2,106 @@ from decimal import Decimal
 
 from app.market_data.models import InstrumentDefinition
 
+_RESEARCH_ECONOMICS = "research-contract-proxy-v1"
+_RESEARCH_PROVENANCE = "Versioned research contract proxy only; not an IG product specification."
+
+
+def _definition(
+    symbol: str,
+    name: str,
+    asset_class: str,
+    currency: str,
+    provider_symbol: str,
+    *,
+    minimum_size: Decimal = Decimal("0.01"),
+    size_step: Decimal = Decimal("0.01"),
+    point_value: Decimal = Decimal("1"),
+    contract_size: Decimal = Decimal("1"),
+    margin_factor: Decimal = Decimal("0.05"),
+) -> InstrumentDefinition:
+    return InstrumentDefinition(
+        symbol=symbol,
+        name=name,
+        asset_class=asset_class,
+        currency=currency,
+        provider_symbol=provider_symbol,
+        point_value=point_value,
+        minimum_size=minimum_size,
+        margin_factor=margin_factor,
+        contract_size=contract_size,
+        size_step=size_step,
+        economics_version=_RESEARCH_ECONOMICS,
+        economics_provenance=_RESEARCH_PROVENANCE,
+    )
+
+
 CORE_UNIVERSE: dict[str, InstrumentDefinition] = {
-    "GBPUSD": InstrumentDefinition("GBPUSD", "GBP/USD", "FX", "USD", "GBPUSD=X", Decimal("1")),
-    "EURUSD": InstrumentDefinition("EURUSD", "EUR/USD", "FX", "USD", "EURUSD=X", Decimal("1")),
-    "USDJPY": InstrumentDefinition("USDJPY", "USD/JPY", "FX", "JPY", "JPY=X", Decimal("1")),
-    "EURGBP": InstrumentDefinition("EURGBP", "EUR/GBP", "FX", "GBP", "EURGBP=X", Decimal("1")),
-    "FTSE100": InstrumentDefinition(
-        "FTSE100", "FTSE 100", "INDEX", "GBP", "^FTSE", Decimal("1"), Decimal("0.1")
+    "GBPUSD": _definition("GBPUSD", "GBP/USD", "FX", "USD", "GBPUSD=X"),
+    "EURUSD": _definition("EURUSD", "EUR/USD", "FX", "USD", "EURUSD=X"),
+    "USDJPY": _definition("USDJPY", "USD/JPY", "FX", "JPY", "JPY=X"),
+    "EURGBP": _definition("EURGBP", "EUR/GBP", "FX", "GBP", "EURGBP=X"),
+    "FTSE100": _definition(
+        "FTSE100",
+        "FTSE 100",
+        "INDEX",
+        "GBP",
+        "^FTSE",
+        minimum_size=Decimal("0.1"),
+        size_step=Decimal("0.1"),
     ),
-    "SP500": InstrumentDefinition(
-        "SP500", "S&P 500", "INDEX", "USD", "^GSPC", Decimal("1"), Decimal("0.1")
+    "SP500": _definition(
+        "SP500",
+        "S&P 500",
+        "INDEX",
+        "USD",
+        "^GSPC",
+        minimum_size=Decimal("0.1"),
+        size_step=Decimal("0.1"),
     ),
-    "NASDAQ100": InstrumentDefinition(
-        "NASDAQ100", "NASDAQ 100", "INDEX", "USD", "^NDX", Decimal("1"), Decimal("0.1")
+    "NASDAQ100": _definition(
+        "NASDAQ100",
+        "NASDAQ 100",
+        "INDEX",
+        "USD",
+        "^NDX",
+        minimum_size=Decimal("0.1"),
+        size_step=Decimal("0.1"),
     ),
-    "DAX": InstrumentDefinition(
-        "DAX", "DAX", "INDEX", "EUR", "^GDAXI", Decimal("1"), Decimal("0.1")
+    "DAX": _definition(
+        "DAX",
+        "DAX",
+        "INDEX",
+        "EUR",
+        "^GDAXI",
+        minimum_size=Decimal("0.1"),
+        size_step=Decimal("0.1"),
     ),
-    "GOLD": InstrumentDefinition(
-        "GOLD", "Gold Futures", "COMMODITY", "USD", "GC=F", Decimal("1"), Decimal("0.1")
+    "GOLD": _definition(
+        "GOLD",
+        "Gold Futures",
+        "COMMODITY",
+        "USD",
+        "GC=F",
+        minimum_size=Decimal("0.1"),
+        size_step=Decimal("0.1"),
     ),
-    "BITCOIN": InstrumentDefinition(
+    "BITCOIN": _definition(
         "BITCOIN",
         "Bitcoin / USD",
         "CRYPTO",
         "USD",
         "BTC-USD",
-        Decimal("1"),
-        Decimal("0.001"),
+        minimum_size=Decimal("0.001"),
+        size_step=Decimal("0.001"),
     ),
-    "ETHEREUM": InstrumentDefinition(
+    "ETHEREUM": _definition(
         "ETHEREUM",
         "Ethereum / USD",
         "CRYPTO",
         "USD",
         "ETH-USD",
-        Decimal("1"),
-        Decimal("0.01"),
+        minimum_size=Decimal("0.01"),
+        size_step=Decimal("0.01"),
     ),
 }
 

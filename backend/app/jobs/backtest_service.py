@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
@@ -13,11 +13,16 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.backtesting import BacktestConfig, Bar, FillPolicy
+from app.backtesting.conversion import ConversionTimingPolicy, QuoteToGbpConversionPolicy
 from app.backtesting.costs import CostPreset
+from app.backtesting.fill_revalidation import FillRiskRevalidationPolicy
+from app.backtesting.fingerprint import SIMULATOR_BEHAVIOR_VERSION
 from app.backtesting.metrics import BacktestMetrics, calculate_metrics
 from app.backtesting.models import EquityPoint
 from app.backtesting.monte_carlo import TradeSequenceMonteCarlo
 from app.backtesting.portfolio_engine import PortfolioBacktestEngine, PortfolioBacktestResult
+from app.backtesting.research_costs import ResearchCostAssumption, ResearchCostSchedule
+from app.backtesting.sessions import MarketSessionPolicy
 from app.backtesting.stress import STANDARD_STRESS_SCENARIOS, apply_stress
 from app.database.models import (
     AuditEventRecord,
@@ -39,12 +44,20 @@ DISPLAY_NAMES = {definition.symbol: definition.name for definition in CORE_UNIVE
 SYMBOLS_BY_NAME = {name: symbol for symbol, name in DISPLAY_NAMES.items()}
 SUPPORTED_STRATEGIES = ("Quant Baseline", "Quant Aggressive", "Regime Ensemble")
 
-_CONVERSION_TO_GBP = {
+_LEGACY_STATIC_CONVERSION_TO_GBP = {
     "GBP": Decimal("1"),
     "USD": Decimal("0.78"),
     "EUR": Decimal("0.86"),
     "JPY": Decimal("0.0053"),
 }
+
+
+def explicit_legacy_static_conversion_policy() -> QuoteToGbpConversionPolicy:
+    """Opt in to the former fixed rates for controlled replay comparisons only."""
+
+    return QuoteToGbpConversionPolicy.explicit_static(_LEGACY_STATIC_CONVERSION_TO_GBP)
+
+
 _CLUSTERS = {
     "GBPUSD": "GBP_FX",
     "EURUSD": "EUR_FX",
@@ -88,6 +101,14 @@ class BacktestRunRequest:
     seed: int = 8500
     operational_costs: Decimal = Decimal("0")
     risk_taper: bool = False
+    conversion_policy: QuoteToGbpConversionPolicy = field(
+        default_factory=QuoteToGbpConversionPolicy.causal
+    )
+    conversion_timing_policy: ConversionTimingPolicy = field(default_factory=ConversionTimingPolicy)
+    fill_revalidation_policy: FillRiskRevalidationPolicy = field(
+        default_factory=FillRiskRevalidationPolicy
+    )
+    session_policy: MarketSessionPolicy = field(default_factory=MarketSessionPolicy)
 
     def __post_init__(self) -> None:
         if self.strategy not in SUPPORTED_STRATEGIES:
@@ -109,6 +130,14 @@ class BacktestRunRequest:
         object.__setattr__(self, "risk_profile", RiskProfile(self.risk_profile))
         object.__setattr__(self, "cost_preset", CostPreset(self.cost_preset))
         object.__setattr__(self, "operational_costs", Decimal(str(self.operational_costs)))
+        if not isinstance(self.conversion_policy, QuoteToGbpConversionPolicy):
+            raise TypeError("conversion_policy must be QuoteToGbpConversionPolicy")
+        if not isinstance(self.conversion_timing_policy, ConversionTimingPolicy):
+            raise TypeError("conversion_timing_policy must be ConversionTimingPolicy")
+        if not isinstance(self.fill_revalidation_policy, FillRiskRevalidationPolicy):
+            raise TypeError("fill_revalidation_policy must be FillRiskRevalidationPolicy")
+        if not isinstance(self.session_policy, MarketSessionPolicy):
+            raise TypeError("session_policy must be MarketSessionPolicy")
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -152,11 +181,15 @@ def _instrument(symbol: str) -> Instrument:
         asset_class=AssetClass(definition.asset_class),
         quote_currency=definition.currency,
         point_value=definition.point_value,
+        contract_size=definition.contract_size,
         min_deal_size=definition.minimum_size,
+        size_step=definition.size_step,
         margin_factor=definition.margin_factor,
-        currency_conversion=_CONVERSION_TO_GBP.get(definition.currency, Decimal("1")),
+        currency_conversion=Decimal("1"),
         correlation_cluster=_CLUSTERS.get(symbol),
         exposure_tags=_EXPOSURE_TAGS.get(symbol, frozenset()),
+        economics_version=definition.economics_version,
+        economics_provenance=definition.economics_provenance,
     )
 
 
@@ -180,36 +213,52 @@ def _strategy(name: str, symbol: str) -> Strategy:
     return RegimeEnsembleStrategy(version_id=f"regime-ensemble-v1:{symbol}")
 
 
-def _load_bars(
-    session: Session, request: BacktestRunRequest
-) -> tuple[dict[str, tuple[Bar, ...]], list[str], dict[str, str]]:
-    output: dict[str, tuple[Bar, ...]] = {}
+@dataclass(frozen=True, slots=True)
+class LoadedBacktestBars:
+    trading: dict[str, tuple[Bar, ...]]
+    references: dict[str, tuple[Bar, ...]]
+    manifest_ids: list[str]
+    checksums: dict[str, str]
+
+
+def _load_bars(session: Session, request: BacktestRunRequest) -> LoadedBacktestBars:
+    trading: dict[str, tuple[Bar, ...]] = {}
+    references: dict[str, tuple[Bar, ...]] = {}
     checksums: dict[str, str] = {}
-    for symbol in request.symbols:
+    instrument_rows: dict[str, InstrumentRecord] = {}
+
+    required_references = request.conversion_policy.required_instruments(
+        [CORE_UNIVERSE[symbol].currency for symbol in request.symbols]
+    )
+    all_symbols = tuple(sorted(set(request.symbols) | set(required_references)))
+    for symbol in all_symbols:
         instrument_row = session.scalar(
             select(InstrumentRecord).where(InstrumentRecord.symbol == symbol)
         )
         if instrument_row is None:
-            raise ValueError(f"{symbol} has not been imported")
-        rows = tuple(
+            role = "conversion reference" if symbol in required_references else "trading"
+            raise ValueError(f"{symbol} {role} data has not been imported")
+        instrument_rows[symbol] = instrument_row
+
+    def load_range(symbol: str, start: datetime, end: datetime) -> tuple[Any, ...]:
+        instrument_row = instrument_rows[symbol]
+        return tuple(
             session.scalars(
                 select(HistoricalBarRecord)
                 .where(
                     HistoricalBarRecord.instrument_id == instrument_row.id,
                     HistoricalBarRecord.provider == "Yahoo Finance",
                     HistoricalBarRecord.interval == request.interval,
-                    HistoricalBarRecord.timestamp >= request.start.replace(tzinfo=None),
-                    HistoricalBarRecord.timestamp < request.end.replace(tzinfo=None),
+                    HistoricalBarRecord.timestamp >= start.replace(tzinfo=None),
+                    HistoricalBarRecord.timestamp < end.replace(tzinfo=None),
                     HistoricalBarRecord.complete.is_(True),
                 )
                 .order_by(HistoricalBarRecord.timestamp)
             )
         )
-        if len(rows) < 2:
-            raise ValueError(
-                f"{symbol} has insufficient {request.interval} data in the requested period"
-            )
-        output[symbol] = tuple(
+
+    def to_bars(symbol: str, rows: Sequence[Any]) -> tuple[Bar, ...]:
+        return tuple(
             Bar(
                 timestamp=_as_utc(row.timestamp),
                 open=row.open,
@@ -222,10 +271,41 @@ def _load_bars(
             )
             for row in rows
         )
+
+    def register_revision(symbol: str, rows: Sequence[Any]) -> None:
         distinct = {row.manifest_checksum for row in rows}
         if len(distinct) != 1:
             raise RuntimeError(f"{symbol} range mixes data revisions: {sorted(distinct)}")
-        checksums[symbol] = distinct.pop()
+        checksum = distinct.pop()
+        previous = checksums.get(symbol)
+        if previous is not None and previous != checksum:
+            raise RuntimeError(f"{symbol} trading/reference ranges use different revisions")
+        checksums[symbol] = checksum
+
+    for symbol in request.symbols:
+        rows = load_range(symbol, request.start, request.end)
+        if len(rows) < 2:
+            raise ValueError(
+                f"{symbol} has insufficient {request.interval} data in the requested period"
+            )
+        trading[symbol] = to_bars(symbol, rows)
+        register_revision(symbol, rows)
+
+    reference_lookback = (
+        request.conversion_policy.staleness.daily_max_age
+        if request.interval == "1d"
+        else request.conversion_policy.staleness.weekend_max_age
+    )
+    reference_start = request.start - reference_lookback
+    for symbol in required_references:
+        rows = load_range(symbol, reference_start, request.end)
+        if not rows:
+            raise ValueError(
+                f"{symbol} has no completed {request.interval} conversion reference bars"
+            )
+        references[symbol] = to_bars(symbol, rows)
+        register_revision(symbol, rows)
+
     manifests = list(
         session.scalars(
             select(DataManifestRecord).where(
@@ -237,7 +317,8 @@ def _load_bars(
     missing = set(checksums.values()) - set(manifest_by_checksum)
     if missing:
         raise RuntimeError(f"data manifests missing for checksums: {sorted(missing)}")
-    return output, [manifest_by_checksum[value] for value in checksums.values()], checksums
+    manifest_ids = [manifest_by_checksum[value] for value in sorted(set(checksums.values()))]
+    return LoadedBacktestBars(trading, references, manifest_ids, checksums)
 
 
 def _json_value(value: Any) -> Any:
@@ -340,8 +421,16 @@ def _persist_result(
     result: PortfolioBacktestResult,
     manifest_ids: list[str],
     checksums: dict[str, str],
+    cost_assumptions: Mapping[str, ResearchCostAssumption] | None = None,
 ) -> BacktestRecord:
     now = datetime.now(UTC)
+    effective_costs = cost_assumptions or ResearchCostSchedule().assumptions_for(
+        list(request.symbols),
+        request.cost_preset,
+    )
+    reference_symbols = request.conversion_policy.required_instruments(
+        [CORE_UNIVERSE[symbol].currency for symbol in request.symbols]
+    )
     record = BacktestRecord(
         name=request.name,
         strategy=request.strategy,
@@ -370,8 +459,30 @@ def _persist_result(
             "seed": request.seed,
             "maximum_holding_bars": request.maximum_holding_bars,
             "strategy_versions": dict(sorted(result.strategy_versions.items())),
-            "static_quote_to_gbp": {
-                symbol: str(_CONVERSION_TO_GBP.get(CORE_UNIVERSE[symbol].currency, 1))
+            "simulator_behavior_version": SIMULATOR_BEHAVIOR_VERSION,
+            "conversion_policy": request.conversion_policy.audit_details(),
+            "conversion_timing_policy": request.conversion_timing_policy.audit_details(
+                interval=request.interval
+            ),
+            "fill_revalidation_policy": request.fill_revalidation_policy.audit_details(),
+            "conversion_reference_symbols": list(reference_symbols),
+            "conversion_reference_checksums": {
+                symbol: checksums[symbol] for symbol in reference_symbols if symbol in checksums
+            },
+            "session_policy": request.session_policy.audit_details(),
+            "research_cost_assumptions": {
+                symbol: effective_costs[symbol].audit_details()
+                for symbol in sorted(effective_costs)
+            },
+            "instrument_economics": {
+                symbol: {
+                    "version": CORE_UNIVERSE[symbol].economics_version,
+                    "provenance": CORE_UNIVERSE[symbol].economics_provenance,
+                    "point_value": str(CORE_UNIVERSE[symbol].point_value),
+                    "contract_size": str(CORE_UNIVERSE[symbol].contract_size),
+                    "minimum_size": str(CORE_UNIVERSE[symbol].minimum_size),
+                    "size_step": str(CORE_UNIVERSE[symbol].size_step),
+                }
                 for symbol in request.symbols
             },
         },
@@ -596,7 +707,12 @@ def _group_rows(
 
 def _ui_metrics(metrics: BacktestMetrics) -> dict[str, Any]:
     total_costs = (
-        metrics.spread_cost + metrics.slippage_cost + metrics.financing_cost + metrics.commission
+        metrics.spread_cost
+        + metrics.slippage_cost
+        + metrics.financing_cost
+        + metrics.commission
+        + metrics.guaranteed_stop_premium
+        + metrics.currency_conversion_cost
     )
     return {
         "startingEquity": float(metrics.starting_equity),
@@ -724,6 +840,13 @@ def _trade_payload(trade: Any, context: dict[str, Any]) -> dict[str, Any]:
             "slippage": float(trade.slippage_cost),
             "financing": float(trade.financing_cost),
             "commission": float(trade.commission),
+            "guaranteedStopPremium": float(trade.guaranteed_stop_premium),
+            "currencyConversion": float(trade.currency_conversion_cost),
+        },
+        "conversionRates": {
+            "approval": float(trade.approval_currency_conversion),
+            "entry": float(trade.entry_currency_conversion),
+            "exit": float(trade.exit_currency_conversion),
         },
         "opportunityScore": float(trade.opportunity_score * 100),
         "challengeResult": "APPROVED" if challenge.get("approved") else "REJECTED",
@@ -841,17 +964,26 @@ def serialize_backtest(
 
 
 def execute_backtest(session: Session, request: BacktestRunRequest) -> BacktestRecord:
-    bars, manifest_ids, checksums = _load_bars(session, request)
+    loaded = _load_bars(session, request)
     instruments = {symbol: _instrument(symbol) for symbol in request.symbols}
     strategies = {symbol: _strategy(request.strategy, symbol) for symbol in request.symbols}
+    cost_assumptions = ResearchCostSchedule().assumptions_for(
+        list(request.symbols),
+        request.cost_preset,
+    )
     engine = PortfolioBacktestEngine(
         instruments,
         strategies,
         risk_limits=limits_for_profile(request.risk_profile),
+        cost_assumptions=cost_assumptions,
+        conversion_policy=request.conversion_policy,
+        conversion_timing_policy=request.conversion_timing_policy,
+        fill_revalidation_policy=request.fill_revalidation_policy,
+        session_policy=request.session_policy,
         risk_taper=request.risk_taper,
     )
     result = engine.run(
-        bars,
+        loaded.trading,
         BacktestConfig(
             starting_equity=request.starting_equity,
             cost_preset=request.cost_preset,
@@ -860,14 +992,23 @@ def execute_backtest(session: Session, request: BacktestRunRequest) -> BacktestR
             maximum_holding_bars=request.maximum_holding_bars,
             operational_costs=request.operational_costs,
             seed=request.seed,
+            bar_interval=request.interval,
         ),
+        reference_bars_by_instrument=loaded.references,
     )
-    return _persist_result(session, request, result, manifest_ids, checksums)
+    return _persist_result(
+        session,
+        request,
+        result,
+        loaded.manifest_ids,
+        loaded.checksums,
+        cost_assumptions,
+    )
 
 
 def execute_cash_baseline(session: Session, request: BacktestRunRequest) -> BacktestRecord:
-    bars, manifest_ids, checksums = _load_bars(session, request)
-    timestamps = sorted({bar.timestamp for values in bars.values() for bar in values})
+    loaded = _load_bars(session, request)
+    timestamps = sorted({bar.timestamp for values in loaded.trading.values() for bar in values})
     points = (
         EquityPoint(timestamps[0], request.starting_equity, request.starting_equity, Decimal("0")),
         EquityPoint(timestamps[-1], request.starting_equity, request.starting_equity, Decimal("0")),
@@ -877,10 +1018,22 @@ def execute_cash_baseline(session: Session, request: BacktestRunRequest) -> Back
         cost_preset=request.cost_preset,
         maximum_holding_bars=request.maximum_holding_bars,
         seed=request.seed,
+        bar_interval=request.interval,
     )
     fingerprint = hashlib.sha256(
         json.dumps(
-            {"cash": True, "checksums": checksums, "config": _json_value(asdict(config))},
+            {
+                "cash": True,
+                "simulator_behavior_version": SIMULATOR_BEHAVIOR_VERSION,
+                "checksums": loaded.checksums,
+                "config": _json_value(asdict(config)),
+                "conversion_policy": request.conversion_policy.audit_details(),
+                "conversion_timing_policy": request.conversion_timing_policy.audit_details(
+                    interval=request.interval
+                ),
+                "fill_revalidation_policy": request.fill_revalidation_policy.audit_details(),
+                "session_policy": request.session_policy.audit_details(),
+            },
             sort_keys=True,
         ).encode()
     ).hexdigest()
@@ -897,7 +1050,13 @@ def execute_cash_baseline(session: Session, request: BacktestRunRequest) -> Back
         orders_by_instrument={symbol: 0 for symbol in request.symbols},
     )
     cash_request = replace(request, name="Cash baseline", strategy="Quant Baseline")
-    record = _persist_result(session, cash_request, result, manifest_ids, checksums)
+    record = _persist_result(
+        session,
+        cash_request,
+        result,
+        loaded.manifest_ids,
+        loaded.checksums,
+    )
     record.strategy = "Cash baseline"
     record.strategy_version = "cash-v1"
     record.result_payload["name"] = "Cash baseline"

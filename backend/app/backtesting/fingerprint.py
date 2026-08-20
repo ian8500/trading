@@ -12,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-SIMULATOR_BEHAVIOR_VERSION = "historical-simulator-v2"
+SIMULATOR_BEHAVIOR_VERSION = "historical-simulator-v4-modeled-open-fx"
 
 
 def _type_name(value: object) -> str:

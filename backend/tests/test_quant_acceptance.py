@@ -162,8 +162,14 @@ def test_bounded_visible_tail_is_causal() -> None:
 
 def test_acceptance_realistic_costs_are_not_silently_zero() -> None:
     engine = HistoricalBacktestEngine(instrument(), OneShotStrategy(), risk_limits=relaxed_limits())
-    zero = engine.run(sample_bars(), BacktestConfig(cost_preset=CostPreset.ZERO))
-    realistic = engine.run(sample_bars(), BacktestConfig(cost_preset=CostPreset.REALISTIC))
+    zero = engine.run(
+        sample_bars(),
+        BacktestConfig(cost_preset=CostPreset.ZERO, bar_interval="1h"),
+    )
+    realistic = engine.run(
+        sample_bars(),
+        BacktestConfig(cost_preset=CostPreset.REALISTIC, bar_interval="1h"),
+    )
     assert len(zero.trades) == len(realistic.trades) == 1
     assert zero.trades[0].total_cost == D("0.00")
     assert realistic.trades[0].total_cost > D("0")
@@ -176,7 +182,7 @@ def test_acceptance_risk_excess_never_reaches_broker() -> None:
         OneShotStrategy(requested_risk=D("0.10")),
         risk_limits=relaxed_limits(),
     )
-    result = engine.run(sample_bars())
+    result = engine.run(sample_bars(), BacktestConfig(bar_interval="1h"))
     assert result.broker_orders_submitted == 0
     decisions = [event for event in result.audit_trail if event.event_type == "RISK_DECISION"]
     assert decisions and decisions[0].details["approved"] is False
@@ -200,7 +206,7 @@ def test_acceptance_stale_data_results_in_no_approved_order() -> None:
 
 def test_acceptance_same_inputs_and_seed_are_reproducible() -> None:
     engine = HistoricalBacktestEngine(instrument(), OneShotStrategy(), risk_limits=relaxed_limits())
-    config = BacktestConfig(seed=42)
+    config = BacktestConfig(seed=42, bar_interval="1h")
     first = engine.run(sample_bars(), config)
     second = engine.run(sample_bars(), config)
     assert first.run_fingerprint == second.run_fingerprint
@@ -246,7 +252,10 @@ def test_single_market_constructor_passes_default_taper_to_risk_gate() -> None:
         OneShotStrategy(),
         risk_limits=limits,
         risk_taper=True,
-    ).run(sample_bars(), BacktestConfig(cost_preset=CostPreset.ZERO))
+    ).run(
+        sample_bars(),
+        BacktestConfig(cost_preset=CostPreset.ZERO, bar_interval="1h"),
+    )
     decision = next(event for event in result.audit_trail if event.event_type == "RISK_DECISION")
     assert decision.details["approved"] is True
     assert decision.details["risk_fraction"] == "0.04"
@@ -256,7 +265,10 @@ def test_single_market_constructor_passes_default_taper_to_risk_gate() -> None:
         instrument(),
         OneShotStrategy(),
         risk_limits=limits,
-    ).run(sample_bars(), BacktestConfig(cost_preset=CostPreset.ZERO))
+    ).run(
+        sample_bars(),
+        BacktestConfig(cost_preset=CostPreset.ZERO, bar_interval="1h"),
+    )
     untapered_decision = next(
         event for event in untapered.audit_trail if event.event_type == "RISK_DECISION"
     )
@@ -285,19 +297,19 @@ def test_single_market_fingerprint_covers_all_outcome_inputs() -> None:
                 risk_limits=selected_limits or base_limits,
                 cost_model=cost_model,
             )
-            .run(selected_bars or source, config or BacktestConfig())
+            .run(selected_bars or source, config or BacktestConfig(bar_interval="1h"))
             .run_fingerprint
         )
 
     baseline = run_fingerprint()
     config_variants = (
-        BacktestConfig(starting_equity=D("600")),
-        BacktestConfig(execution_delay_bars=2),
-        BacktestConfig(maximum_holding_bars=1),
-        BacktestConfig(operational_costs=D("1")),
-        BacktestConfig(seed=99),
-        BacktestConfig(close_positions_at_end=False),
-        BacktestConfig(cost_preset=CostPreset.STRESSED),
+        BacktestConfig(starting_equity=D("600"), bar_interval="1h"),
+        BacktestConfig(execution_delay_bars=2, bar_interval="1h"),
+        BacktestConfig(maximum_holding_bars=1, bar_interval="1h"),
+        BacktestConfig(operational_costs=D("1"), bar_interval="1h"),
+        BacktestConfig(seed=99, bar_interval="1h"),
+        BacktestConfig(close_positions_at_end=False, bar_interval="1h"),
+        BacktestConfig(cost_preset=CostPreset.STRESSED, bar_interval="1h"),
     )
     for config in config_variants:
         assert run_fingerprint(config=config) != baseline

@@ -34,6 +34,12 @@ class InstrumentDefinition:
     point_value: Decimal = Decimal("1")
     minimum_size: Decimal = Decimal("0.01")
     margin_factor: Decimal = Decimal("0.05")
+    contract_size: Decimal = Decimal("1")
+    size_step: Decimal = Decimal("0.01")
+    economics_version: str = "research-contract-proxy-v1"
+    economics_provenance: str = (
+        "Versioned research contract proxy only; not an IG product specification."
+    )
 
 
 @dataclass(frozen=True, slots=True)
